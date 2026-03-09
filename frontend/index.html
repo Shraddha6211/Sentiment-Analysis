@@ -1,0 +1,1179 @@
+<!DOCTYPE html>
+<!--
+=============================================================
+  STEP 6: FRONTEND UI
+  File: frontend/index.html
+=============================================================
+
+PURPOSE:
+    A single-page application that lets users:
+    1. Type or paste a social media post
+    2. Click "Analyze" to call the Flask API
+    3. See the predicted sentiment with confidence scores
+    4. Analyze multiple posts in batch mode
+
+TECHNOLOGY STACK:
+    - Pure HTML/CSS/JS (no frameworks needed!)
+    - Google Fonts (free)
+    - Chart.js (free CDN) for the probability bar chart
+    - Fetch API (built into browsers) for HTTP requests
+
+DEPLOYMENT:
+    Option A: Host on GitHub Pages (100% free, static hosting)
+              Just push this file to a GitHub repo and enable Pages.
+    Option B: Host on Netlify (free tier, drag-and-drop deploy)
+    Option C: Serve from Flask's static/ folder (same server)
+
+    For Options A & B:
+      Set API_BASE_URL below to your Render.com backend URL.
+
+AESTHETIC DIRECTION:
+    Dark editorial theme — inspired by terminal/hacker aesthetics
+    with a clean, data-dashboard feel.
+    Color palette: Deep navy + electric cyan + warm amber accents.
+=============================================================
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SentiScope — Social Media Sentiment Analyzer</title>
+
+  <!-- ── Google Fonts (Free) ── -->
+  <!-- DM Mono: distinctive monospace for code/labels -->
+  <!-- Syne: geometric, editorial display font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- ── Chart.js (Free CDN) ── -->
+  <!-- Used to render the probability confidence bar chart -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <style>
+    /* ──────────────────────────────────────────
+       CSS VARIABLES — DESIGN TOKENS
+       Centralizing colors/fonts makes theming easy.
+       Change one variable → whole app updates.
+    ────────────────────────────────────────── */
+    :root {
+      --bg-base:      #080d14;    /* Deep navy — main background */
+      --bg-card:      #0e1621;    /* Slightly lighter card surface */
+      --bg-input:     #131e2e;    /* Input field background */
+      --border:       #1e2d42;    /* Subtle border color */
+      --border-glow:  #1d8cf8;    /* Active/focus glow */
+      --cyan:         #00d4ff;    /* Primary accent — electric cyan */
+      --green:        #22c55e;    /* Positive sentiment */
+      --red:          #ef4444;    /* Negative sentiment */
+      --amber:        #f59e0b;    /* Neutral sentiment */
+      --text-primary: #e2eaf5;    /* Main text */
+      --text-muted:   #5a7a9e;    /* Secondary/muted text */
+      --text-dim:     #2d4560;    /* Very dim labels */
+      --font-display: 'Syne', sans-serif;
+      --font-mono:    'DM Mono', monospace;
+      --radius:       12px;
+      --radius-sm:    6px;
+      --transition:   0.25s ease;
+    }
+
+    /* ──────────────────────────────────────────
+       RESET & BASE STYLES
+    ────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background-color: var(--bg-base);
+      color: var(--text-primary);
+      font-family: var(--font-display);
+      min-height: 100vh;
+      /* Subtle grid texture for depth */
+      background-image:
+        linear-gradient(rgba(0, 212, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 212, 255, 0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+
+    /* ──────────────────────────────────────────
+       HEADER / NAV
+    ────────────────────────────────────────── */
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 1.2rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      backdrop-filter: blur(12px);
+      background: rgba(8, 13, 20, 0.85);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo {
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 1.4rem;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .logo span {
+      color: var(--cyan);
+    }
+
+    /* Live status indicator (green dot) */
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      padding: 0.35rem 0.75rem;
+      border-radius: 20px;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--text-dim);
+      transition: background var(--transition);
+    }
+
+    .status-dot.connected { background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse-dot 2s infinite; }
+    .status-dot.error     { background: var(--red); }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+
+    /* ──────────────────────────────────────────
+       MAIN LAYOUT
+    ────────────────────────────────────────── */
+    main {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 3rem 1.5rem 5rem;
+    }
+
+    /* ── Hero section ── */
+    .hero {
+      text-align: center;
+      margin-bottom: 3rem;
+      animation: fadeUp 0.6s ease both;
+    }
+
+    .hero-tag {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--cyan);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+    }
+
+    .hero h1 {
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      margin-bottom: 1rem;
+    }
+
+    .hero h1 em {
+      font-style: normal;
+      color: var(--cyan);
+    }
+
+    .hero p {
+      color: var(--text-muted);
+      font-size: 1rem;
+      max-width: 480px;
+      margin: 0 auto;
+      line-height: 1.6;
+      font-weight: 400;
+    }
+
+    /* ──────────────────────────────────────────
+       CARD COMPONENT
+    ────────────────────────────────────────── */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.75rem;
+      animation: fadeUp 0.5s ease both;
+    }
+
+    .card + .card { margin-top: 1.25rem; }
+
+    .card-title {
+      font-size: 0.72rem;
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .card-title::before {
+      content: '';
+      display: block;
+      width: 18px;
+      height: 2px;
+      background: var(--cyan);
+      flex-shrink: 0;
+    }
+
+    /* ──────────────────────────────────────────
+       INPUT SECTION
+    ────────────────────────────────────────── */
+    .input-wrapper {
+      position: relative;
+    }
+
+    textarea {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-family: var(--font-display);
+      font-size: 1rem;
+      line-height: 1.6;
+      padding: 1rem 1.1rem;
+      resize: vertical;
+      min-height: 120px;
+      outline: none;
+      transition: border-color var(--transition), box-shadow var(--transition);
+    }
+
+    textarea::placeholder { color: var(--text-dim); }
+
+    textarea:focus {
+      border-color: var(--border-glow);
+      box-shadow: 0 0 0 3px rgba(29, 140, 248, 0.12);
+    }
+
+    .char-count {
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      color: var(--text-dim);
+      text-align: right;
+      margin-top: 0.4rem;
+    }
+
+    .char-count.warn { color: var(--amber); }
+    .char-count.over { color: var(--red); }
+
+    /* ── Action buttons ── */
+    .btn-row {
+      display: flex;
+      gap: 0.75rem;
+      margin-top: 1.1rem;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 0.9rem;
+      padding: 0.65rem 1.4rem;
+      border-radius: var(--radius-sm);
+      border: none;
+      cursor: pointer;
+      transition: all var(--transition);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn-primary {
+      background: var(--cyan);
+      color: var(--bg-base);
+      flex: 1;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: #33dcff;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 20px rgba(0, 212, 255, 0.3);
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      border-color: var(--cyan);
+      color: var(--cyan);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Ripple effect on click */
+    .btn::after {
+      content: '';
+      position: absolute;
+      width: 100%; height: 100%;
+      top: 0; left: 0;
+      background: rgba(255,255,255,0.08);
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    .btn:active::after { opacity: 1; }
+
+    /* Spinner inside button while loading */
+    .btn-primary.loading .btn-text { visibility: hidden; }
+    .btn-primary.loading::before {
+      content: '';
+      position: absolute;
+      width: 18px; height: 18px;
+      border: 2px solid rgba(8,13,20,0.3);
+      border-top-color: var(--bg-base);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    @keyframes spin { to { transform: translate(-50%, -50%) rotate(360deg); } }
+
+    /* ──────────────────────────────────────────
+       RESULT SECTION
+    ────────────────────────────────────────── */
+    #result-section {
+      display: none;         /* Hidden until prediction runs */
+      animation: fadeUp 0.4s ease both;
+    }
+
+    /* Large sentiment display */
+    .sentiment-display {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      padding: 1.5rem;
+      border-radius: var(--radius-sm);
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      margin-bottom: 1.5rem;
+    }
+
+    .sentiment-emoji {
+      font-size: 3rem;
+      flex-shrink: 0;
+      animation: popIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    }
+
+    @keyframes popIn {
+      from { transform: scale(0.3); opacity: 0; }
+      to   { transform: scale(1);   opacity: 1; }
+    }
+
+    .sentiment-label {
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      text-transform: capitalize;
+    }
+
+    .sentiment-confidence {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+    }
+
+    .inference-tag {
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      color: var(--text-dim);
+      background: var(--bg-input);
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      margin-top: 0.3rem;
+      display: inline-block;
+    }
+
+    /* ── Probability Bars ── */
+    .prob-bars { display: flex; flex-direction: column; gap: 0.8rem; }
+
+    .prob-row {
+      display: grid;
+      grid-template-columns: 80px 1fr 52px;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .prob-label {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: capitalize;
+    }
+
+    .prob-bar-track {
+      height: 8px;
+      background: var(--bg-input);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .prob-bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      width: 0%;                    /* Animated from 0 → actual value */
+      transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .prob-value {
+      font-family: var(--font-mono);
+      font-size: 0.73rem;
+      color: var(--text-primary);
+      text-align: right;
+    }
+
+    /* ── Chart canvas ── */
+    .chart-container {
+      position: relative;
+      height: 180px;
+      margin-top: 1.5rem;
+    }
+
+    /* ──────────────────────────────────────────
+       BATCH ANALYSIS
+    ────────────────────────────────────────── */
+    #batch-section .batch-inputs {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    .batch-item {
+      display: flex;
+      gap: 0.5rem;
+      align-items: flex-start;
+    }
+
+    .batch-num {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      padding-top: 0.7rem;
+      width: 18px;
+      flex-shrink: 0;
+    }
+
+    .batch-input {
+      flex: 1;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-family: var(--font-display);
+      font-size: 0.9rem;
+      padding: 0.55rem 0.85rem;
+      outline: none;
+      transition: border-color var(--transition);
+    }
+
+    .batch-input:focus { border-color: var(--border-glow); }
+    .batch-input::placeholder { color: var(--text-dim); }
+
+    .batch-result {
+      flex-shrink: 0;
+      font-size: 0.8rem;
+      padding: 0.55rem 0.7rem;
+      border-radius: var(--radius-sm);
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      font-family: var(--font-mono);
+      min-width: 90px;
+      text-align: center;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .batch-result.visible { opacity: 1; }
+
+    /* Batch summary pills */
+    .batch-summary {
+      display: flex;
+      gap: 0.6rem;
+      margin-top: 1.1rem;
+      flex-wrap: wrap;
+    }
+
+    .summary-pill {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      padding: 0.4rem 0.9rem;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+    }
+
+    /* ──────────────────────────────────────────
+       EXAMPLE POSTS
+    ────────────────────────────────────────── */
+    .examples-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 0.6rem;
+    }
+
+    .example-chip {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 0.65rem 0.9rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all var(--transition);
+      line-height: 1.4;
+    }
+
+    .example-chip:hover {
+      border-color: var(--cyan);
+      color: var(--text-primary);
+      transform: translateY(-1px);
+    }
+
+    /* ──────────────────────────────────────────
+       HOW IT WORKS SECTION
+    ────────────────────────────────────────── */
+    .pipeline-steps {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .pipeline-step {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 1rem;
+      text-align: center;
+    }
+
+    .pipeline-step .step-num {
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      color: var(--cyan);
+      margin-bottom: 0.4rem;
+    }
+
+    .pipeline-step .step-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 0.3rem;
+    }
+
+    .pipeline-step .step-desc {
+      font-size: 0.73rem;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    /* ──────────────────────────────────────────
+       ERROR TOAST
+    ────────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      background: #1e0a0a;
+      border: 1px solid var(--red);
+      color: var(--red);
+      padding: 0.85rem 1.2rem;
+      border-radius: var(--radius-sm);
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      max-width: 360px;
+      opacity: 0;
+      transform: translateY(12px);
+      transition: all 0.3s ease;
+      z-index: 999;
+      pointer-events: none;
+    }
+
+    #toast.show { opacity: 1; transform: translateY(0); }
+
+    /* ──────────────────────────────────────────
+       ANIMATIONS
+    ────────────────────────────────────────── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ──────────────────────────────────────────
+       RESPONSIVE
+    ────────────────────────────────────────── */
+    @media (max-width: 600px) {
+      header { padding: 1rem; }
+      main   { padding: 2rem 1rem 4rem; }
+      .hero h1 { font-size: 1.8rem; }
+      .sentiment-display { flex-direction: column; text-align: center; }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- ── HEADER ── -->
+  <header>
+    <div class="logo">Senti<span>Scope</span></div>
+    <div class="status-badge">
+      <div class="status-dot" id="status-dot"></div>
+      <span id="status-text">connecting...</span>
+    </div>
+  </header>
+
+  <!-- ── MAIN CONTENT ── -->
+  <main>
+
+    <!-- HERO -->
+    <section class="hero">
+      <p class="hero-tag">// ML Sentiment Analysis</p>
+      <h1>Understand the <em>mood</em><br/>behind any post</h1>
+      <p>Powered by Logistic Regression + TF-IDF. Classifies social media text as positive, negative, or neutral in milliseconds.</p>
+    </section>
+
+    <!-- ─────────────────────────────────────── -->
+    <!-- CARD 1: SINGLE TEXT ANALYSIS            -->
+    <!-- ─────────────────────────────────────── -->
+    <div class="card" style="animation-delay:0.1s">
+      <div class="card-title">Single Post Analysis</div>
+
+      <div class="input-wrapper">
+        <textarea
+          id="text-input"
+          placeholder="Type or paste a social media post here… e.g., 'Just had the best day ever! 🎉'"
+          maxlength="2000"
+        ></textarea>
+        <div class="char-count" id="char-count">0 / 2000</div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="analyze-btn" onclick="analyzeSingle()">
+          <span class="btn-text">Analyze Sentiment</span>
+        </button>
+        <button class="btn btn-secondary" onclick="clearInput()">Clear</button>
+      </div>
+    </div>
+
+    <!-- RESULT (hidden until analysis runs) -->
+    <div class="card" id="result-section" style="animation-delay:0.15s">
+      <div class="card-title">Result</div>
+
+      <!-- Sentiment label + emoji + confidence -->
+      <div class="sentiment-display" id="sentiment-display">
+        <div class="sentiment-emoji" id="result-emoji">–</div>
+        <div>
+          <div class="sentiment-label" id="result-label">–</div>
+          <div class="sentiment-confidence" id="result-confidence">–</div>
+          <div class="inference-tag" id="result-inference">–</div>
+        </div>
+      </div>
+
+      <!-- Probability bars for all 3 classes -->
+      <div class="card-title">Confidence Scores</div>
+      <div class="prob-bars" id="prob-bars">
+        <!-- Populated by JS -->
+      </div>
+
+      <!-- Chart.js bar chart -->
+      <div class="chart-container">
+        <canvas id="prob-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- ─────────────────────────────────────── -->
+    <!-- CARD 2: EXAMPLE POSTS                   -->
+    <!-- ─────────────────────────────────────── -->
+    <div class="card" style="animation-delay:0.2s">
+      <div class="card-title">Try Example Posts</div>
+      <div class="examples-grid" id="examples-grid">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+
+    <!-- ─────────────────────────────────────── -->
+    <!-- CARD 3: BATCH ANALYSIS                  -->
+    <!-- ─────────────────────────────────────── -->
+    <div class="card" id="batch-section" style="animation-delay:0.25s">
+      <div class="card-title">Batch Analysis</div>
+      <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:1rem">
+        Analyze multiple posts at once. Great for comment threads or tweet lists.
+      </p>
+
+      <div class="batch-inputs" id="batch-inputs">
+        <!-- 5 batch input rows generated by JS -->
+      </div>
+
+      <div class="btn-row" style="margin-top:1rem">
+        <button class="btn btn-primary" id="batch-btn" onclick="analyzeBatch()">
+          <span class="btn-text">Analyze All Posts</span>
+        </button>
+      </div>
+
+      <div class="batch-summary" id="batch-summary"></div>
+    </div>
+
+    <!-- ─────────────────────────────────────── -->
+    <!-- CARD 4: HOW IT WORKS                    -->
+    <!-- ─────────────────────────────────────── -->
+    <div class="card" style="animation-delay:0.3s">
+      <div class="card-title">How It Works</div>
+      <div class="pipeline-steps">
+        <div class="pipeline-step">
+          <div class="step-num">STEP 01</div>
+          <div class="step-title">Text Cleaning</div>
+          <div class="step-desc">Remove URLs, @mentions, symbols. Lowercase everything.</div>
+        </div>
+        <div class="pipeline-step">
+          <div class="step-num">STEP 02</div>
+          <div class="step-title">TF-IDF</div>
+          <div class="step-desc">Convert words to numbers. Rare-but-frequent words score highest.</div>
+        </div>
+        <div class="pipeline-step">
+          <div class="step-num">STEP 03</div>
+          <div class="step-title">Logistic Regression</div>
+          <div class="step-desc">Multiply weights × features. Softmax converts to probabilities.</div>
+        </div>
+        <div class="pipeline-step">
+          <div class="step-num">STEP 04</div>
+          <div class="step-title">Prediction</div>
+          <div class="step-desc">Highest probability class wins: positive, negative, or neutral.</div>
+        </div>
+      </div>
+    </div>
+
+  </main><!-- /main -->
+
+  <!-- ── ERROR TOAST ── -->
+  <div id="toast"></div>
+
+  <!-- ══════════════════════════════════════════
+       JAVASCRIPT
+  ══════════════════════════════════════════ -->
+  <script>
+    // ─────────────────────────────────────────
+    //   CONFIGURATION
+    //   ⚠️ UPDATE THIS URL after deploying to Render!
+    //   Example: "https://your-app.onrender.com"
+    //   For local development keep "http://localhost:5000"
+    // ─────────────────────────────────────────
+    const API_BASE_URL = "http://localhost:5000";
+
+    // Color map matching CSS variables
+    const COLORS = {
+      positive: "#22c55e",
+      negative: "#ef4444",
+      neutral:  "#f59e0b",
+    };
+
+    // Example posts users can click to auto-fill the textarea
+    const EXAMPLE_POSTS = [
+      "I absolutely love this new feature! Best update ever 🎉",
+      "Worst customer service I've ever experienced, unacceptable",
+      "Just had lunch at the new café downtown, it was okay",
+      "This product completely changed my life, highly recommend!",
+      "So frustrated with these constant crashes, fix your app",
+      "The weather today is a bit cloudy, nothing special",
+      "Finally got the promotion I've been working toward 🏆",
+      "Feeling really down today, nothing seems to go right 😔",
+      "Traffic on the highway is average, same as usual",
+    ];
+
+    // ─────────────────────────────────────────
+    //   CHART INSTANCE
+    //   Keep reference so we can destroy + re-create
+    // ─────────────────────────────────────────
+    let probChart = null;
+
+    // ─────────────────────────────────────────
+    //   INITIALIZATION — runs once on page load
+    // ─────────────────────────────────────────
+    document.addEventListener("DOMContentLoaded", () => {
+      buildExamples();
+      buildBatchInputs();
+      checkHealth();       // Ping the API to show connection status
+      setupCharCount();    // Live character counter
+    });
+
+    // ─────────────────────────────────────────
+    //   HEALTH CHECK
+    //   Pings GET /health every 30s to show status dot
+    // ─────────────────────────────────────────
+    async function checkHealth() {
+      const dot  = document.getElementById("status-dot");
+      const text = document.getElementById("status-text");
+
+      try {
+        // fetch() is the browser's built-in HTTP client
+        const res = await fetch(`${API_BASE_URL}/health`);
+        if (res.ok) {
+          dot.className  = "status-dot connected";
+          text.textContent = "API connected";
+        } else {
+          throw new Error("Non-OK response");
+        }
+      } catch {
+        dot.className  = "status-dot error";
+        text.textContent = "API offline";
+      }
+
+      // Check again every 30 seconds
+      setTimeout(checkHealth, 30_000);
+    }
+
+    // ─────────────────────────────────────────
+    //   CHARACTER COUNTER
+    // ─────────────────────────────────────────
+    function setupCharCount() {
+      const textarea = document.getElementById("text-input");
+      const counter  = document.getElementById("char-count");
+
+      textarea.addEventListener("input", () => {
+        const len = textarea.value.length;
+        counter.textContent = `${len} / 2000`;
+        counter.className = len > 1800 ? "char-count over"
+                          : len > 1500 ? "char-count warn"
+                          : "char-count";
+      });
+    }
+
+    // ─────────────────────────────────────────
+    //   BUILD EXAMPLE CHIPS
+    // ─────────────────────────────────────────
+    function buildExamples() {
+      const grid = document.getElementById("examples-grid");
+      EXAMPLE_POSTS.forEach(post => {
+        const div = document.createElement("div");
+        div.className = "example-chip";
+        div.textContent = post;
+        div.addEventListener("click", () => {
+          // Auto-fill textarea and trigger analysis
+          document.getElementById("text-input").value = post;
+          document.getElementById("text-input").dispatchEvent(new Event("input"));
+          analyzeSingle();
+          // Smooth scroll to result
+          setTimeout(() => document.getElementById("result-section")
+            .scrollIntoView({ behavior: "smooth", block: "start" }), 200);
+        });
+        grid.appendChild(div);
+      });
+    }
+
+    // ─────────────────────────────────────────
+    //   BUILD BATCH INPUT ROWS
+    // ─────────────────────────────────────────
+    function buildBatchInputs() {
+      const container = document.getElementById("batch-inputs");
+      for (let i = 0; i < 5; i++) {
+        const row = document.createElement("div");
+        row.className = "batch-item";
+        row.innerHTML = `
+          <span class="batch-num">${i + 1}.</span>
+          <input
+            class="batch-input"
+            type="text"
+            placeholder="Enter post #${i + 1}…"
+            id="batch-input-${i}"
+          />
+          <div class="batch-result" id="batch-result-${i}">–</div>
+        `;
+        container.appendChild(row);
+      }
+    }
+
+    // ─────────────────────────────────────────
+    //   ANALYZE SINGLE TEXT
+    //   Calls POST /predict and renders results
+    // ─────────────────────────────────────────
+    async function analyzeSingle() {
+      const btn   = document.getElementById("analyze-btn");
+      const input = document.getElementById("text-input");
+      const text  = input.value.trim();
+
+      if (!text) {
+        showToast("Please enter some text to analyze.");
+        return;
+      }
+
+      // Show loading state
+      btn.classList.add("loading");
+      btn.disabled = true;
+
+      try {
+        // ── HTTP POST request to Flask API ──
+        // fetch(url, options) returns a Promise that resolves to a Response
+        const response = await fetch(`${API_BASE_URL}/api/predict`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",  // Tell server we're sending JSON
+          },
+          body: JSON.stringify({ text }),          // Convert JS object → JSON string
+        });
+
+        // response.json() parses the JSON body into a JS object
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || "Prediction failed");
+        }
+
+        // ── Render the result ──
+        renderResult(data.data);
+
+      } catch (err) {
+        showToast(`Error: ${err.message}. Is the API running?`);
+      } finally {
+        // Always reset button state (even if there was an error)
+        btn.classList.remove("loading");
+        btn.disabled = false;
+      }
+    }
+
+    // ─────────────────────────────────────────
+    //   RENDER RESULT
+    //   Updates all UI elements with prediction data
+    // ─────────────────────────────────────────
+    function renderResult(data) {
+      const section = document.getElementById("result-section");
+      section.style.display = "block";
+
+      const color = COLORS[data.sentiment];
+
+      // ── Big sentiment display ──
+      document.getElementById("result-emoji").textContent = data.emoji;
+      document.getElementById("result-label").textContent = data.sentiment;
+      document.getElementById("result-label").style.color = color;
+      document.getElementById("result-confidence").textContent =
+        `Confidence: ${(data.confidence * 100).toFixed(1)}%`;
+      document.getElementById("result-inference").textContent =
+        `⚡ ${data.inference_time_ms}ms inference`;
+
+      // ── Probability Bars ──
+      const barsContainer = document.getElementById("prob-bars");
+      barsContainer.innerHTML = "";  // Clear previous results
+
+      const probs = data.probabilities;
+      // Sort classes by probability descending for better readability
+      const sorted = Object.entries(probs).sort((a, b) => b[1] - a[1]);
+
+      sorted.forEach(([label, prob]) => {
+        const pct     = (prob * 100).toFixed(1);
+        const barColor = COLORS[label];
+
+        const row = document.createElement("div");
+        row.className = "prob-row";
+        row.innerHTML = `
+          <div class="prob-label">${label}</div>
+          <div class="prob-bar-track">
+            <div
+              class="prob-bar-fill"
+              id="bar-${label}"
+              style="background:${barColor}"
+            ></div>
+          </div>
+          <div class="prob-value">${pct}%</div>
+        `;
+        barsContainer.appendChild(row);
+
+        // Animate bar width (CSS transition handles the smooth animation)
+        // setTimeout gives the DOM a frame to paint the element at 0% first
+        setTimeout(() => {
+          document.getElementById(`bar-${label}`).style.width = `${pct}%`;
+        }, 50);
+      });
+
+      // ── Chart.js Bar Chart ──
+      renderChart(probs);
+    }
+
+    // ─────────────────────────────────────────
+    //   RENDER CHART
+    //   Recreates the Chart.js bar chart
+    // ─────────────────────────────────────────
+    function renderChart(probs) {
+      const ctx = document.getElementById("prob-chart").getContext("2d");
+
+      // Destroy previous chart instance to avoid memory leaks
+      if (probChart) probChart.destroy();
+
+      const labels = Object.keys(probs);
+      const values = labels.map(l => +(probs[l] * 100).toFixed(2));
+      const bgColors = labels.map(l => COLORS[l]);
+
+      probChart = new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [{
+            label: "Probability %",
+            data:  values,
+            backgroundColor: bgColors.map(c => c + "99"),  // Add transparency
+            borderColor:     bgColors,
+            borderWidth: 1.5,
+            borderRadius: 4,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: { duration: 600, easing: "easeOutQuart" },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: "#0e1621",
+              borderColor: "#1e2d42",
+              borderWidth: 1,
+              titleColor: "#e2eaf5",
+              bodyColor: "#5a7a9e",
+              callbacks: {
+                label: ctx => ` ${ctx.raw.toFixed(1)}% confidence`,
+              },
+            },
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: 100,
+              ticks: { color: "#5a7a9e", font: { family: "DM Mono" }, callback: v => v + "%" },
+              grid: { color: "#1e2d42" },
+            },
+            x: {
+              ticks: { color: "#5a7a9e", font: { family: "DM Mono" } },
+              grid: { display: false },
+            },
+          },
+        },
+      });
+    }
+
+    // ─────────────────────────────────────────
+    //   ANALYZE BATCH
+    //   Collects all 5 inputs and calls POST /predict-batch
+    // ─────────────────────────────────────────
+    async function analyzeBatch() {
+      const btn = document.getElementById("batch-btn");
+
+      // Collect non-empty inputs
+      const texts = [];
+      for (let i = 0; i < 5; i++) {
+        const val = document.getElementById(`batch-input-${i}`).value.trim();
+        texts.push(val || null);  // null if empty (we handle below)
+      }
+
+      const validTexts = texts.filter(Boolean);
+      if (validTexts.length === 0) {
+        showToast("Please enter at least one post for batch analysis.");
+        return;
+      }
+
+      btn.classList.add("loading");
+      btn.disabled = true;
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/predict/batch`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ texts: validTexts }),
+        });
+
+        const data = await response.json();
+        if (!response.ok || data.status !== "success") {
+          throw new Error(data.message || "Batch prediction failed");
+        }
+
+        // ── Display each result next to its input ──
+        let resultIdx = 0;
+        for (let i = 0; i < 5; i++) {
+          const resultEl = document.getElementById(`batch-result-${i}`);
+
+          if (!texts[i]) {
+            resultEl.textContent = "–";
+            resultEl.className   = "batch-result";
+            continue;
+          }
+
+          const res   = data.data.results[resultIdx++];
+          const color = COLORS[res.sentiment];
+          resultEl.textContent     = `${res.emoji} ${res.sentiment}`;
+          resultEl.style.color     = color;
+          resultEl.style.borderColor = color + "66";
+          resultEl.className         = "batch-result visible";
+        }
+
+        // ── Summary pills ──
+        const summary = data.data.summary;
+        const summaryEl = document.getElementById("batch-summary");
+        summaryEl.innerHTML = `
+          <div class="summary-pill" style="color:var(--green);border-color:var(--green)33">
+            😊 ${summary.positive} positive
+          </div>
+          <div class="summary-pill" style="color:var(--red);border-color:var(--red)33">
+            😞 ${summary.negative} negative
+          </div>
+          <div class="summary-pill" style="color:var(--amber);border-color:var(--amber)33">
+            😐 ${summary.neutral} neutral
+          </div>
+        `;
+
+      } catch (err) {
+        showToast(`Error: ${err.message}`);
+      } finally {
+        btn.classList.remove("loading");
+        btn.disabled = false;
+      }
+    }
+
+    // ─────────────────────────────────────────
+    //   UTILITIES
+    // ─────────────────────────────────────────
+
+    function clearInput() {
+      document.getElementById("text-input").value = "";
+      document.getElementById("char-count").textContent = "0 / 2000";
+      document.getElementById("result-section").style.display = "none";
+    }
+
+    // Show a toast notification for errors
+    function showToast(message, duration = 4000) {
+      const toast = document.getElementById("toast");
+      toast.textContent = message;
+      toast.classList.add("show");
+      setTimeout(() => toast.classList.remove("show"), duration);
+    }
+
+    // Allow pressing Enter (without Shift) to submit
+    document.addEventListener("keydown", e => {
+      const focused = document.activeElement;
+      if (e.key === "Enter" && !e.shiftKey && focused.id === "text-input") {
+        e.preventDefault();
+        analyzeSingle();
+      }
+    });
+  </script>
+
+</body>
+</html>

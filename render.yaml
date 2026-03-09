@@ -1,0 +1,50 @@
+# =============================================================
+#   render.yaml — Render.com Deployment Configuration
+# =============================================================
+#
+# Render.com is a FREE cloud platform that can host Flask apps.
+# Free tier provides:
+#   - 750 hrs/month of compute (enough for 1 always-on service)
+#   - Automatic HTTPS (SSL certificate)
+#   - Auto-deploys when you push to GitHub
+#
+# HOW TO DEPLOY:
+#   1. Push this entire backend/ folder to a GitHub repository
+#   2. Create a free account at render.com
+#   3. New → Web Service → Connect your GitHub repo
+#   4. Render auto-detects render.yaml and uses these settings
+#
+# WHAT EACH FIELD MEANS:
+#   name     : Display name in the Render dashboard
+#   runtime  : python3 = Python environment
+#   buildCommand : Runs ONCE on deploy to install dependencies
+#                  and prepare the model
+#   startCommand : Runs to launch the server
+#                  gunicorn is a production-grade WSGI server
+#   envVars  : Environment variables available to your app
+# =============================================================
+
+services:
+  - type: web
+    name: sentiment-analyzer-api
+    runtime: python3
+    region: oregon             # Free region; change to nearest you
+    plan: free
+
+    # Build step: install packages and train the model
+    buildCommand: |
+      pip install -r requirements.txt
+      python data/generate_data.py
+      python model/train.py
+
+    # Start step: launch gunicorn
+    # "app:app" means: file=app.py, Flask instance=app
+    # --workers 2: Handle 2 concurrent requests (free tier limit)
+    startCommand: gunicorn app:app --workers 2 --bind 0.0.0.0:$PORT
+
+    envVars:
+      - key: DEBUG
+        value: "false"         # Never run debug mode in production!
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+        
