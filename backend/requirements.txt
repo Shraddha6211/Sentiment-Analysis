@@ -1,0 +1,32 @@
+# =============================================================================
+# requirements.txt — Python Dependencies
+# =============================================================================
+# Install: pip install -r requirements.txt
+# =============================================================================
+
+# [ML] Core machine learning library (TF-IDF, Logistic Regression, metrics)
+scikit-learn==1.4.2
+
+# [ML] Natural Language Processing toolkit (stopwords, tokenization)
+nltk==3.8.1
+
+# [ML] Numerical computing
+numpy==1.26.4
+
+# [ML] Data loading and manipulation
+pandas==2.2.2
+
+# [ML] Model serialization
+joblib==1.4.2
+
+# [API] Lightweight Python web framework
+flask==3.0.3
+
+# [API] Cross-Origin Resource Sharing support
+flask-cors==4.0.1
+
+# [API] Production WSGI server (required by Render/Railway)
+gunicorn==22.0.0
+
+flask
+flask_cors
