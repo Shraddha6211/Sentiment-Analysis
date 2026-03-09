@@ -5,7 +5,7 @@
 # =============================================================================
 
 # [ML] Core machine learning library (TF-IDF, Logistic Regression, metrics)
-scikit-learn==1.4.2
+scikit-learn==1.5.1
 
 # [ML] Natural Language Processing toolkit (stopwords, tokenization)
 nltk==3.8.1
