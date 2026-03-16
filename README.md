@@ -1,6 +1,6 @@
 ## Sentiment Analysis
-# SentiScope — Sentiment Analysis with Social Media Data
-## Complete ML Project | Beginner → Intermediate Level
+# SentiScope | Sentiment Analysis with Social Media Data
+## Complete ML Project | Beginner - Intermediate Level
 
 ---
 
