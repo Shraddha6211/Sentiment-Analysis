@@ -247,7 +247,7 @@ Once comfortable, try these improvements:
 
 ---
 
-## 📚 What You Learned
+## 📚 What I Learned
 
 - ✅ End-to-end ML project structure (data → train → serve → UI)
 - ✅ Text preprocessing with regex
